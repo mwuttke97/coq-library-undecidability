@@ -72,7 +72,9 @@ Ltac msplit n :=
    end.
 
 (*workaround, works with coq 8.10*)
-Lemma induction_on_aux2 X Y (f : X -> Y -> nat) (P : X -> Y -> Type) : (let t := f in forall (x : X) (y : Y), P x y) -> (forall (x : X) (y : Y), f x y = f x y -> P x y).
+Lemma induction_on_aux2 X Y (f : X -> Y -> nat) (P : X -> Y -> Type) : 
+        (let t := f in forall (x : X) (y : Y), P x y) 
+     -> (forall (x : X) (y : Y), f x y = f x y -> P x y).
 Proof.
 intros H x y _. apply H.
 Qed.
@@ -88,18 +90,52 @@ Tactic Notation "define" ident(f) "of" hyp(n) hyp(m) "as" uconstr(t)  :=
     match type of m with ?M  => pose (f (n:N) (m:M) := t) end end.
 *)
 
-(*used in indoction on with two parameters workaround*)
-Theorem measure_rect2 X Y (m : X -> Y -> nat) (P : X -> Y -> Type) :
-      (forall x y, (forall x' y', m x' y' < m x y -> P x' y') -> P x y) -> forall x y, P x y.
-Proof.
-  pose (Q v := P (fst v) (snd v)).
-  enough (P = fun x y => Q (x, y)) as HP; [|reflexivity].
-  rewrite HP.
-  intros H x y. eapply measure_rect with (m := fun v => m (fst v) (snd v)).
-  intros v H'.
-  apply H. intros. apply H'.
-  assumption.
-Qed.
+(* used in induction on with two parameters workaround *)
+(* DLW: this one extracts better *)
+
+Section measure_rect2.
+
+  Variable (X Y : Type) (m : X -> Y -> nat) (P : X -> Y -> Type).
+
+  Hypothesis F : (forall x y, (forall x' y', m x' y' < m x y -> P x' y') -> P x y).
+
+  Let m' (c : X * Y) := match c with (x,y) => m x y end.
+
+  Let R c d := m' c < m' d.
+
+  Definition measure_rect2 x y : P x y.
+  Proof.
+    cut (Acc R (x,y)).
+    + revert x y.
+      refine (fix loop x y H := @F x y (fun x' y' H' => loop x' y' _)).
+      apply (Acc_inv H), H'.
+    + apply wf_inverse_image with (f := m'), lt_wf.
+  Defined.
+
+End measure_rect2.
+
+Section measure_rect3.
+
+  Variable (X Y Z : Type) (m : X -> Y -> Z -> nat) (P : X -> Y -> Z -> Type).
+
+  Hypothesis F : (forall x y z, (forall x' y' z', m x' y' z' < m x y z -> P x' y' z') -> P x y z).
+
+  Let m' (c : X * Y * Z) := match c with (x,y,z) => m x y z end.
+
+  Let R c d := m' c < m' d.
+
+  Definition measure_rect3 x y z : P x y z.
+  Proof.
+    cut (Acc R (x,y,z)).
+    + revert x y z.
+      refine (fix loop x y z H := @F x y z (fun x' y' z' H' => loop x' y' z' _)).
+      apply (Acc_inv H), H'.
+    + apply wf_inverse_image with (f := m'), lt_wf.
+  Defined.
+
+End measure_rect3.
+
+Check measure_rect3.
 
 (*coq 8.10 workaround*)
 Tactic Notation "induction" "on" hyp(x) hyp(y) "as" ident(IH) "with" "measure" uconstr(f) :=
